@@ -1,6 +1,7 @@
 import os
 import cgi
 import urllib
+import json
 
 from google.appengine.api import users
 from google.appengine.ext import ndb
@@ -8,7 +9,11 @@ from google.appengine.ext import ndb
 import webapp2
 import jinja2
 
-from music_search import *
+from music_search import VKAudioSearcher
+
+class Config(ndb.Model):
+    key = ndb.StringProperty(indexed=True)
+    value = ndb.StringProperty(indexed=False)
 
 class Track(ndb.Model):
     aid = ndb.IntegerProperty(indexed=True)
@@ -82,6 +87,49 @@ class FromDB(webapp2.RequestHandler):
         self.response.write(html)
 
 
+class SearchAudio(webapp2.RequestHandler):
+    def get(self):
+        try:
+            offset = int(self.request.get('offset', 0))
+            count = int(self.request.get('count', 20))
+            query = self.request.get('query', '')
+
+            if not AUDIO_SEARCHER:
+                err = init_searcher()
+                if err:
+                    raise Exception('Audio searcher are not initialized! %s'%err)
+
+            if not query:
+                raise ValueError('Empty query')
+
+            all_count, cur_offset, records = AUDIO_SEARCHER.search(query, offset, count)
+            error = None
+        except Exception, err:
+            error = str(err)
+            all_count, cur_offset, records = 0, 0, []
+
+        self.response.headers['Content-Type'] = 'application/json'
+        self.response.write(json.dumps({'offset': cur_offset, 'all_count': all_count, \
+                                            'tracks': records, 'error':error}))
+
+
+def init_searcher():
+    global AUDIO_SEARCHER
+    q = Config.query(Config.key == 'vk_token')
+    config_v = q.fetch(1)
+    vk_token = ''
+    if config_v:
+        vk_token = config_v[0].value
+
+    try:
+        AUDIO_SEARCHER = VKAudioSearcher(vk_token)
+    except Exception, err:
+        AUDIO_SEARCHER = None
+        return str(err)
+
+
+AUDIO_SEARCHER = None
+init_searcher()
 
 JINJA_ENVIRONMENT = jinja2.Environment(
     loader=jinja2.FileSystemLoader(os.path.join(os.path.dirname(__file__), 'templates')),
@@ -91,4 +139,5 @@ JINJA_ENVIRONMENT = jinja2.Environment(
 application = webapp2.WSGIApplication([
     ('/', MainPage),
     ('/indb', FromDB),
+    ('/search_audio', SearchAudio)
 ], debug=True)

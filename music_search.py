@@ -1,11 +1,59 @@
 
 import vkontakte
 
-vk = vkontakte.API(token='72c50bd5e7f0a5e1c764cb1c70848bc6fa32c455c020a37d8fa58ea1adf21785080b52d84d1f1e80079ed')
+class AbstractAudioSearcher(object):
+    def __init__(self, auth_token):
+        super(AbstractAudioSearcher, self).__init__()
+        self._token = auth_token
 
-SORT_POPULATIRY = 2
-SEARCH_ARTIST = 1
-SEARCH_ALL = 0
-#audio = vk.audio.search(q='The Tiger Lillies', sort=SORT_POPULATIRY, count=5, offset=0, performer=SEARCH_ARTIST)
+    def search(self, query, offset=0, count=20):
+        '''
+        return <all count>, <ret count>, <cur offset>, <records>
+        '''
+        pass
+
+    def get_by_id(self, track_id):
+        pass
+
+    def get_lyrics(self, track_id):
+        pass
 
 
+
+class VKAudioSearcher(AbstractAudioSearcher):
+    SORT_POPULATIRY = 2
+
+    SEARCH_ARTIST = 1
+    SEARCH_ALL = 0
+
+    def __init__(self, auth_token):
+        super(VKAudioSearcher, self).__init__(auth_token)
+
+        self.__vk = vkontakte.API(token=auth_token)
+
+    
+    def search(self, query, offset=0, count=20):
+        '''
+        return <all count>, <cur offset>, <records>
+        '''
+        ret_records = []
+        ret_offset = offset
+        _cache = {}
+
+        while True:
+            raw = self.__vk.audio.search(q=query, sort=self.SORT_POPULATIRY, count=count, offset=ret_offset, performer=self.SEARCH_ARTIST)
+            all_count = raw[0]
+            records = raw[1:]
+            if len(records) == 0:
+                break
+            ret_offset += len(records)
+            for rec in records:
+                if (rec['duration'], rec['title'], rec['artist']) in _cache:
+                    continue
+                ret_records.append(rec)
+                _cache[(rec['duration'], rec['title'], rec['artist'])] = None
+
+            if len(ret_records) >= count:
+                break
+
+        return all_count, ret_offset, ret_records 
