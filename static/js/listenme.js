@@ -67,6 +67,12 @@ function play_next_track() {
 
 function authInfo(response) {
       if (response.session) {
+            $.glob.auth_dict = {'mid': response.session.mid, 'expire': response.session.expire, 'secret': response.session.secret,
+                                'sid': response.session.sid, 'sig': response.session.sig}
+
+            //var params = {param: val};
+            //$.extend(params, $.glob.auth_dict);
+
             VK.Api.call('users.get', {uids: response.session.mid, fields:'photo_50'}, function(r) { 
                 if(r.response) { 
                     $('#user_avatar').attr('src', r.response[0].photo_50);
@@ -84,6 +90,7 @@ function authInfo(response) {
 $(function () {
     $.glob = {};
     $.glob.search_offset = 0;
+    $.glob.auth_dict = {};
 
     $('#audio_search_inp').keypress(function( event ) {
         if ( event.which == 13 ) {
@@ -104,5 +111,9 @@ $(function () {
     });
 
     VK.Auth.getLoginStatus(authInfo);
+
+    $('#home_btn').click(function() {
+       $.post('/auth', $.glob.auth_dict, function(data) { alert(data); }); 
+    });
 
 });

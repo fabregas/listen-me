@@ -2,6 +2,8 @@ import os
 import cgi
 import urllib
 import json
+import time
+from hashlib import md5
 
 from google.appengine.api import users
 from google.appengine.ext import ndb
@@ -35,6 +37,30 @@ class Playlist(ndb.Model):
 
 DEFAULT_ALBUM_NAME = 'default'
 
+def auth(params):
+    expire = params.get('expire', None)
+    mid = params.get('mid', None)
+    secret = params.get('secret', None)
+    sid = params.get('sid', None)
+    sig = params.get('sig', None)
+
+    if (expire is None) or (mid is None) or (secret is None) or (sid is None) or (sid is None):
+        raise ValueError('Invalid auth parameters! Expected expire, mid, secret, sid, sig')
+
+    sign = 'expire=%smid=%ssecret=%ssid=%s%s'%(expire, mid, secret, sid, AUTH_SECRET)
+    sign = md5(sign).hexdigest()
+    if sign != sig:
+        raise Exception('Invalid auth!')
+
+    if int(expire) < time.time():
+        raise Exception('Session is expired! %s > %s'%(int(expire), time.time()))
+
+    return mid
+
+class AuthPage(webapp2.RequestHandler):
+    def post(self):
+        user_id = auth(self.request)
+        self.response.write('OK for user %s'%user_id)
 
 class MainPage(webapp2.RequestHandler):
     def get(self):
@@ -113,23 +139,13 @@ class SearchAudio(webapp2.RequestHandler):
                                             'tracks': records, 'error':error}))
 
 
-def init_searcher():
-    global AUDIO_SEARCHER
-    q = Config.query(Config.key == 'vk_token')
-    config_v = q.fetch(1)
-    vk_token = ''
-    if config_v:
-        vk_token = config_v[0].value
 
-    try:
-        AUDIO_SEARCHER = VKAudioSearcher(vk_token)
-    except Exception, err:
-        AUDIO_SEARCHER = None
-        return str(err)
+AUTH_SECRET = ''
+q = Config.query(Config.key == 'vk_auth_secret')
+config_v = q.fetch(1)
+if config_v:
+    AUTH_SECRET = config_v[0].value
 
-
-AUDIO_SEARCHER = None
-init_searcher()
 
 JINJA_ENVIRONMENT = jinja2.Environment(
     loader=jinja2.FileSystemLoader(os.path.join(os.path.dirname(__file__), 'templates')),
@@ -139,5 +155,5 @@ JINJA_ENVIRONMENT = jinja2.Environment(
 application = webapp2.WSGIApplication([
     ('/', MainPage),
     ('/indb', FromDB),
-    ('/search_audio', SearchAudio)
+    ('/auth', AuthPage)
 ], debug=True)
