@@ -32,10 +32,11 @@
         </div>
 
           <div class="col-md-8">
-            <audio id="player" style="width:100%; margin-top: 10px;" src="www" controls></audio>
+            <audio id="player" style="width:100%; margin-top: 10px;" src="" controls></audio>
           </div>
           <div class="col-md-2">
-              <button type="button" class="btn btn-primary btn-sm" style="margin-top:10px;">Add to playlist</button>
+              <button type="button" class="btn btn-primary btn-sm" disabled="disabled"
+                    style="margin-top:10px;" id="add_to_playlist" onclick="add_to_playlist();">Add to playlist</button>
           </div>
 
         <div class="navbar-collapseE collapseW">
@@ -55,16 +56,11 @@
       <h1></h1>
       <div class="container">
           <div class="row">
-            <button type="button" class="btn btn-default btn-md" id="home_btn">Home</button>
-            <button type="button" class="btn btn-default btn-md">Playlists</button>
-            <button type="button" class="btn btn-default btn-md">Statistic</button>
             <span class="">
                 <strong style="color: #999;" class="hidden" id="cur_track_title_p">&nbsp;&nbsp;Now playing:&nbsp;</strong>
                 <strong style="color: #666;" class="" id="cur_track_title"></strong>
             </span>
           </div>
-
-
 
           <div class="row hidden">
               <div class="col-md-2">
@@ -143,10 +139,43 @@
         <div class="col-md-6">
             <div class="panel panel-default">
                 <div class="panel-heading">
-                    Current playlist name
+                    <div class="alert alert-info text-center" style="margin-bottom: 0px;">
+                        PLAYLIST
+                    </div>
+
+                    <div class="dropdown">
+                      <button class="btn btn-default dropdown-toggle" style="width:100%;" type="button" id="select_playlists_h" data-toggle="dropdown">
+                      </button>
+                      <ul class="dropdown-menu" role="menu" aria-labelledby="select_playlists_h" id="select_playlists_ddn">
+                        <li role="presentation"><a role="menuitem" tabindex="-1" href="#">Action</a></li>
+                        <li role="presentation"><a role="menuitem" tabindex="-1" href="#">Another action</a></li>
+                        <li role="presentation"><a role="menuitem" tabindex="-1" href="#">Something else here looooooo</a></li>
+                        <li role="presentation" class="divider hidden"></li>
+                        <li role="presentation" class="hidden"><a role="menuitem" tabindex="-1" href="#">...</a></li>
+                      </ul>
+                    </div>
+                  
+                    <div style="margin-top: 5px;" class="text-right">
+                        <button type="button" class="btn btn-sm" title="Add new playlist" onclick="add_new_playlist();">
+                            <span class="glyphicon glyphicon-plus"></span>
+                        </button>
+
+                        <button type="button" class="btn btn-sm" disabled="disabled" id="epl_btn" title="Edit playlist" onclick="mod_playlist();">
+                            <span class="glyphicon glyphicon-edit"></span>
+                        </button>
+
+                        &nbsp;
+                        <button type="button" class="btn btn-sm" disabled="disabled" id="sbt_btn" title="Schedule broadcast translation">
+                            <span class="glyphicon glyphicon-bullhorn"></span>
+                        </button>
+                    </div>
+
                 </div>
                 <div class="panel-body">
-                    <table class="table" style="height: 400px;">
+                    <table class="table" style="height: 350px;">
+                        <ul class="sortable sortable-dragging list-group" id="pl_ui" style="list-style: none;">
+
+                        </ul>
 
                     </table>
                 </div>
@@ -162,10 +191,111 @@
     </div> <!-- /container -->
 
 
+
+    <div class="modal fade" id="AddPlaylistModal">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            <h4 class="modal-title">Add new playlist</h4>
+          </div>
+          <div class="modal-body">
+              <div id="add_pl_err">
+              </div>
+              <div role="form">
+                    <div class="form-group">
+                        <label  class="control-label" for="f_pl_label">Playlist label</label>
+                        <input type="text" class="form-control" id="f_pl_label" placeholder="Enter playlist label" maxlength="64">
+                    </div>
+                    <div class="form-group">
+                        <label class="control-label" for="f_pl_descr">Description</label>
+                        <textarea class="form-control" rows="3" id="f_pl_descr" maxlength="10000"></textarea>
+                    </div>
+              </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id='add_pl_btn' onclick="create_playlist();">Create</button>
+          </div>
+        </div><!-- /.modal-content -->
+      </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+        
+    <div class="modal fade" id="ModPlaylistModal">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            <h4 class="modal-title">Modify playlist</h4>
+          </div>
+          <div class="modal-body">
+              <div id="mod_pl_err">
+              </div>
+              <div role="form">
+                    <input type="hidden" id="fm_pl_id">
+                    <div class="form-group">
+                        <label  class="control-label" for="fm_pl_label">Playlist label</label>
+                        <input type="text" class="form-control" id="fm_pl_label" placeholder="Enter playlist label" maxlength="64">
+                    </div>
+                    <div class="form-group">
+                        <label class="control-label" for="fm_pl_descr">Description</label>
+                        <textarea class="form-control" rows="3" id="fm_pl_descr" maxlength="10000"></textarea>
+                    </div>
+              </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id='mod_pl_btn' onclick="modify_playlist();">Save</button>
+            &nbsp;&nbsp;
+            <button type="button" class="btn btn-danger" id='del_pl_btn' onclick="remove_playlist_ask();">Delete</button>
+          </div>
+        </div><!-- /.modal-content -->
+      </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+
+    <div class="modal fade" id="ApplyDeletePlaylistModal">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h4 class="modal-title">Are you sure?!</h4>
+          </div>
+          <div class="modal-body">
+              <div id="del_pl_err">
+              </div>
+              <p>Do you really want to delete playlist "<span id="fd_plid"></span>"?</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-default" data-dismiss="modal">No</button>
+            <button type="button" class="btn btn-danger" id='a_del_pl_btn' onclick="remove_playlist();">Yes, delete it!</button>
+          </div>
+        </div><!-- /.modal-content -->
+      </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+
+    <div class="modal fade" id="ApplyDeleteTrackModal">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h4 class="modal-title">Are you sure?!</h4>
+          </div>
+          <div class="modal-body">
+              <div id="del_track_err">
+              </div>
+              <p>Do you really want to remove track "<span id="dt_name"></span>" from playlist?</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-default" data-dismiss="modal">No</button>
+            <button type="button" class="btn btn-danger" id='a_del_tr_btn' onclick="root_remove_track();">Yes, remove it!</button>
+          </div>
+        </div><!-- /.modal-content -->
+      </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+
     <!-- Bootstrap core JavaScript
     ================================================== -->
     <!-- Placed at the end of the document so the pages load faster -->
     <script src="/static/js/jquery.min.js"></script>
+    <script src="/static/js/jquery.sortable.js"></script>
     <script src="/static/js/bootstrap.min.js"></script>
     <script src="/static/js/listenme.js"></script>
     <script src="//vk.com/js/api/openapi.js" type="text/javascript"></script>

@@ -1,3 +1,4 @@
+
 import os
 import cgi
 import urllib
@@ -11,7 +12,6 @@ from google.appengine.ext import ndb
 import webapp2
 import jinja2
 
-from music_search import VKAudioSearcher
 
 class Config(ndb.Model):
     key = ndb.StringProperty(indexed=True)
@@ -22,20 +22,19 @@ class Track(ndb.Model):
     artist = ndb.StringProperty(indexed=True)
     title = ndb.StringProperty(indexed=True)
     duration = ndb.IntegerProperty()
-    genre = ndb.IntegerProperty()
+    genre = ndb.IntegerProperty(default=-1)
     url = ndb.StringProperty(indexed=False)
-
+    index = ndb.IntegerProperty()
 
 class Playlist(ndb.Model):
-    owner = ndb.UserProperty()
+    owner = ndb.StringProperty(indexed=True)
     name = ndb.StringProperty(indexed=False)
     description = ndb.StringProperty(indexed=False)
     date = ndb.DateTimeProperty(auto_now_add=True)
-    tracks = ndb.KeyProperty(repeated=True)
     tags = ndb.StringProperty(repeated=True)
+    tracks = ndb.StructuredProperty(Track, repeated=True)
 
 
-DEFAULT_ALBUM_NAME = 'default'
 
 def auth(params):
     expire = params.get('expire', None)
@@ -49,6 +48,7 @@ def auth(params):
 
     sign = 'expire=%smid=%ssecret=%ssid=%s%s'%(expire, mid, secret, sid, AUTH_SECRET)
     sign = md5(sign).hexdigest()
+
     if sign != sig:
         raise Exception('Invalid auth!')
 
@@ -61,6 +61,222 @@ class AuthPage(webapp2.RequestHandler):
     def post(self):
         user_id = auth(self.request)
         self.response.write('OK for user %s'%user_id)
+
+
+class AddPlaylist(webapp2.RequestHandler):
+    def post(self):
+        error = ''
+        pl_id = None
+        try:
+            user_id = auth(self.request)
+
+            pl_label = self.request.get('label', '')
+            pl_descr = self.request.get('descr', '')
+
+            if len(pl_label) < 3:
+                raise Exception('Label is too short!')
+
+            pl_obj = Playlist(owner=user_id, name=pl_label, description=pl_descr)
+            pl_obj.put()
+            pl_id = pl_obj.key.id()
+        except Exception, err:
+            error = str(err)
+
+        self.response.headers['Content-Type'] = 'application/json'
+        self.response.write(json.dumps({'pl_id': pl_id, 'error': error}))
+
+class AddToPlaylist(webapp2.RequestHandler):
+    def post(self):
+        error = ''
+
+        def a_get(attr):
+            val = self.request.get(attr, None)
+            if not val:
+                raise Exception('Expected "%s" attribute'%attr)
+            return val
+
+        try:
+            user_id = auth(self.request)
+
+            pl_id = a_get('pl_id')
+            aid = a_get('aid')
+            artist = a_get('artist')
+            title = a_get('title')
+            url = a_get('url')
+            duration = a_get('duration')
+
+            key = ndb.Key('Playlist', int(pl_id))
+            pl = key.get()
+
+            track = Track(aid=int(aid), artist=artist, title=title, \
+                        duration=int(duration), url=url, index=len(pl.tracks)+1)
+
+
+            pl.tracks.append(track) 
+            pl.put()
+        except Exception, err:
+            error = str(err)
+
+        self.response.headers['Content-Type'] = 'application/json'
+        self.response.write(json.dumps({'error': error}))
+
+class ChangePlaylist(webapp2.RequestHandler):
+    def post(self):
+        error = ''
+
+        try:
+            user_id = auth(self.request)
+            pl_id = self.request.get('pl_id', None)
+            if pl_id is None:
+                raise Exception('Expected "pl_id" attribute')
+
+            i = 0
+            mod_tracks = {}
+            while True:
+                aid = self.request.get('tracks[%i][aid]'%i, None)
+                if aid is None:
+                    break
+                index = self.request.get('tracks[%i][index]'%i, None)
+                mod_tracks[int(aid)] = (index,)
+                i += 1
+
+            key = ndb.Key('Playlist', int(pl_id))
+            pl = key.get()
+            for track in pl.tracks:
+                mod_info = mod_tracks.get(track.aid, None)
+                if mod_info is None:
+                    continue
+                if mod_info[0] is not None:
+                    track.index = int(mod_info[0])
+            pl.put()
+        except Exception, err:
+            error = str(err)
+
+        self.response.headers['Content-Type'] = 'application/json'
+        self.response.write(json.dumps({'error': error}))
+
+class ModPlaylist(webapp2.RequestHandler):
+    def post(self):
+        error = ''
+        pl_id = None
+        try:
+            user_id = auth(self.request)
+
+            pl_id = self.request.get('id', '')
+            if not pl_id:
+                raise Exception('Expected ID attribute!')
+            pl_label = self.request.get('label', '')
+            pl_descr = self.request.get('descr', '')
+
+            if len(pl_label) < 3:
+                raise Exception('Label is too short!')
+
+            key = ndb.Key('Playlist', int(pl_id))
+            pl_obj = key.get()
+            pl_obj.name = pl_label
+            pl_obj.description = pl_descr
+            pl_obj.put()
+        except Exception, err:
+            error = str(err)
+
+        self.response.headers['Content-Type'] = 'application/json'
+        self.response.write(json.dumps({'pl_id': pl_id, 'error': error}))
+
+class DelPlaylist(webapp2.RequestHandler):
+    def post(self):
+        error = ''
+        try:
+            user_id = auth(self.request)
+
+            pl_id = self.request.get('id', '')
+            if not pl_id:
+                raise Exception('Expected ID attribute!')
+
+            key = ndb.Key('Playlist', int(pl_id))
+            key.delete()
+        except Exception, err:
+            error = str(err)
+
+        self.response.headers['Content-Type'] = 'application/json'
+        self.response.write(json.dumps({'error': error}))
+
+class DelTrack(webapp2.RequestHandler):
+    def post(self):
+        error = ''
+        try:
+            user_id = auth(self.request)
+
+            pl_id = self.request.get('pl_id', '')
+            if not pl_id:
+                raise Exception('Expected "pl_id" attribute!')
+            aid = self.request.get('aid', '')
+            if not aid:
+                raise Exception('Expected "aid" attribute!')
+            aid = int(aid)
+
+            key = ndb.Key('Playlist', int(pl_id))
+            pl = key.get()
+            rm_i = None
+            for i, track in enumerate(pl.tracks):
+                if track.aid == aid:
+                    rm_i = i
+                    break
+
+            if rm_i is not None:
+                del pl.tracks[rm_i]
+                pl.put()
+        except Exception, err:
+            error = str(err)
+
+        self.response.headers['Content-Type'] = 'application/json'
+        self.response.write(json.dumps({'error': error}))
+
+class GetPlaylists(webapp2.RequestHandler):
+    def post(self):
+        error = ''
+        data = []
+        try:
+            user_id = auth(self.request)
+
+            count = int(self.request.get('count', 20))
+            offset = int(self.request.get('offset', 0))
+
+            pl_query = Playlist.query(Playlist.owner==user_id).order(-Playlist.date)
+            pls = pl_query.fetch(count, offset=offset)
+
+            data = [(pl.key.id(), pl.name) for pl in pls]
+        except Exception, err:
+            error = str(err)
+
+        self.response.headers['Content-Type'] = 'application/json'
+        self.response.write(json.dumps({'data': data, 'error': error}))
+
+class GetPlaylistInfo(webapp2.RequestHandler):
+    def post(self):
+        error = descr = ''
+        tracks = []
+        try:
+            user_id = auth(self.request)
+
+            count = int(self.request.get('count', 20))
+            offset = int(self.request.get('offset', 0))
+
+            pl_id = self.request.get('id', '')
+            if not pl_id:
+                raise Exception('Expected ID attribute!')
+
+
+            key = ndb.Key('Playlist', int(pl_id))
+            pl_obj = key.get()
+            descr = pl_obj.description
+            tracks = [tr.to_dict() for tr in pl_obj.tracks]
+            tracks.sort(key = lambda i: i['index'])
+        except Exception, err:
+            error = str(err)
+
+        self.response.headers['Content-Type'] = 'application/json'
+        self.response.write(json.dumps({'tracks': tracks, 'description': descr, 'error': error}))
+
 
 class MainPage(webapp2.RequestHandler):
     def get(self):
@@ -101,18 +317,6 @@ class MainPage(webapp2.RequestHandler):
         self.response.write(html)
 
 
-class FromDB(webapp2.RequestHandler):
-    def get(self):
-        tracks_query = Track.query()#.order(-Track.date)
-        tracks = tracks_query.fetch(10)
-
-        html = '<html><body>'
-        for track in tracks:
-            html += '<p>%s - %s <audio src="%s" controls></audio></p>'%(track.artist, track.title, track.url)
-        html += '</body></html>'
-        self.response.write(html)
-
-
 class SearchAudio(webapp2.RequestHandler):
     def get(self):
         try:
@@ -139,7 +343,6 @@ class SearchAudio(webapp2.RequestHandler):
                                             'tracks': records, 'error':error}))
 
 
-
 AUTH_SECRET = ''
 q = Config.query(Config.key == 'vk_auth_secret')
 config_v = q.fetch(1)
@@ -154,6 +357,13 @@ JINJA_ENVIRONMENT = jinja2.Environment(
 
 application = webapp2.WSGIApplication([
     ('/', MainPage),
-    ('/indb', FromDB),
+    ('/add_playlist', AddPlaylist),
+    ('/mod_playlist', ModPlaylist),
+    ('/del_playlist', DelPlaylist),
+    ('/get_playlists', GetPlaylists),
+    ('/get_playlist_info', GetPlaylistInfo),
+    ('/add_to_playlist', AddToPlaylist),
+    ('/change_playlist', ChangePlaylist),
+    ('/del_track', DelTrack),
     ('/auth', AuthPage)
 ], debug=True)

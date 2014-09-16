@@ -4,3 +4,13 @@
     padding-top: 5px;
 }
 
+li.sortable-placeholder {
+    border: 1px dashed #CCC;
+    height: 50px;
+    background: none;
+}
+
+.pl_track_duration {
+
+    float: right;
+}
