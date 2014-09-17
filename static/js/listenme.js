@@ -4,7 +4,7 @@ function clear_search_tracks() {
 }
 
 function duration_hum(duration_i) {
-    var r =  duration_i % 60;
+    var r =  parseInt(duration_i) % 60;
     if (r < 10) { r = '0' + r; }
     return parseInt(duration_i / 60) + ':' + r;
 }
@@ -56,10 +56,52 @@ function play_track(tr_el) {
     tr_el.addClass('info');
 
     document.getElementById('player').play();
-    $('#cur_track_title_p').removeClass('hidden');
-    $('#cur_track_title').html(tr_el.find('td:eq(0)').html());
+
+    set_cur_track_name(tr_el.find('td:eq(0)').html());
+
+    $('#track_progress').slider_enable();
+    $('#track_volume').slider_enable();
+    $('.player_nav button').removeClass('disabled');
 
     check_add_to_pl_btn();
+}
+
+function play_pause_btn() {
+    var player = document.getElementById('player');
+    if (player.paused) {
+        player.play()
+    } else {
+        player.pause()
+    }
+}
+
+
+function mute_btn() {
+    var player = document.getElementById('player');
+    player.muted = ! player.muted;
+
+    if (player.muted) {
+        $.glob.vol_level = $('#track_volume').slider_value();
+        $('#track_volume').slider('setValue', 0);
+        $('.mute_btn span').removeClass('glyphicon-volume-up').addClass('glyphicon-volume-off');
+    } else {
+        $('#track_volume').slider('setValue', $.glob.vol_level);
+        $('.mute_btn span').removeClass('glyphicon-volume-off').addClass('glyphicon-volume-up');
+    }
+}
+
+function change_player_volume(vol) {
+        var player = document.getElementById('player');
+        if (player.muted) {
+            $.glob.vol_level = vol;
+            $('.mute_btn').click();
+        }
+        player.volume = vol;
+}
+
+function change_player_position(pos) {
+    var player = document.getElementById('player');
+    player.currentTime = pos * player.duration / 100;
 }
 
 function check_add_to_pl_btn() {
@@ -211,6 +253,9 @@ function create_playlist() {
         $('<li role="presentation"><a role="menuitem" tabindex="-1" plid="' + 
                 data.pl_id + '">'+pl_label+'</a></li>').prependTo('#select_playlists_ddn');
 
+        $('#select_playlists_ddn li:first a').click(function(e) {
+            select_playlist($(e.target).attr('plid'), $(e.target).html());
+        });
         select_playlist(data.pl_id, pl_label);
         
         check_add_to_pl_btn();
@@ -288,6 +333,7 @@ function remove_playlist() {
             $('#select_playlists_h').attr('disabled', 'disabled'); 
             $('#epl_btn').attr('disabled', 'disabled');
             $('#sbt_btn').attr('disabled', 'disabled');
+            $('#pl_ui').html('');
         } else {
             select_playlist(f_li.attr('plid'), f_li.html());
         }
@@ -303,16 +349,18 @@ function remove_playlist() {
 
 function add_local_to_playlist(aid, track, duration) {
     var pl_li = '<li class="list-group-item" aid="'+aid+'">' +
-                    '<button class="pl_tr_rm btn btn-xs hidden" title="Remove track"><span class="glyphicon glyphicon-remove"></span></button>&nbsp;' +
                     '<span class="pl_track_name">'+track+'</span><span class="pl_track_duration">'+duration+'</span>' +
+                    '<button class="pl_tr_rm pl_track_duration btn btn-xs hidden" title="Remove track"><span class="glyphicon glyphicon-remove"></span></button>' +
                 '</li>';
     $('#pl_ui').append(pl_li); 
     
     $('.sortable li:last').hover(function() {
             $(this).find('.pl_tr_rm').removeClass('hidden');
+            $(this).find('span.pl_track_duration').addClass('hidden');
         },
         function() { 
             $(this).find('.pl_tr_rm').addClass('hidden');
+            $(this).find('span.pl_track_duration').removeClass('hidden');
     });
 
     $('.sortable li:last .pl_tr_rm').click(rm_track);
@@ -414,9 +462,26 @@ function root_remove_track() {
     });
 }
 
+function set_cur_track_name(track_name) {
+    var l_width = $('.player_nav .track_label').width() - $('.player_nav .cur_track_title').textWidth('... 99:99');
+    if ($('.player_nav .cur_track_title').textWidth(track_name) > l_width) {
+        while ($('.player_nav .cur_track_title').textWidth(track_name) > l_width) { track_name = track_name.slice(0, -1); }
+        track_name = track_name + '...';
+    }
+    $('.player_nav .cur_track_title').html(track_name);
+}
+
+$.fn.textWidth = function(text, font) {
+    if (!$.fn.textWidth.fakeEl) $.fn.textWidth.fakeEl = $('<span>').hide().appendTo(document.body);
+    $.fn.textWidth.fakeEl.text(text || this.val() || this.text()).css('font', font || this.css('font'));
+    return $.fn.textWidth.fakeEl.width();
+};
+
+
 $(function () {
     $.glob = {};
     $.glob.search_offset = 0;
+    $.glob.vol_level = 1;
     $.glob.auth_dict = {};
     $.playlist_order = {};
 
@@ -473,4 +538,32 @@ $(function () {
     $.fn.hasAttr = function(name) {  
            return this.attr(name) !== undefined;
     };
+
+
+    $('#track_progress').slider({value: 0, disabled: true}).on('slide', function(ev) {
+        change_player_position(ev.value);  
+    });
+    $('#track_volume').slider({value: 100, disabled: true}).on('slide', function(ev) {
+        change_player_volume(ev.value);
+    });
+
+    $('audio').on('timeupdate', function(e) {
+        $('#track_progress').slider('setValue', (e.target.currentTime * 100) / e.target.duration)
+        $('.player_nav .cur_track_duration').html(duration_hum(e.target.currentTime));
+    }).on('progress', function(e) {
+        //var loaded = e.target.buffered.end(e.target.buffered.length-1);
+        var loaded = e.target.buffered.end(0);
+        $('#track_progress').parent().find('.slider-loaded').width((loaded * $('.slider').width()) / e.target.duration);
+    }).on('play', function() {
+        $('.play_pause_btn span').removeClass('glyphicon-play').addClass('glyphicon-pause');
+    }).on('pause', function() { 
+        $('.play_pause_btn span').removeClass('glyphicon-pause').addClass('glyphicon-play');
+    });
+
+    $('.play_pause_btn').click(play_pause_btn);
+    $('.mute_btn').click(mute_btn);
+
+    $(window).resize(function() {
+        $('.player_nav .player_prog .slider').width($('.player_nav').width() - 120 - 150);
+    });
 });

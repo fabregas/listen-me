@@ -1,4 +1,21 @@
 
+.navbar-fixed-top {
+    height: 70px;
+    padding-top: 10px;
+}
+
+.player_nav .btn:focus, .player_nav .btn:hover, .player_nav .btn:active {
+    outline: none;
+}
+
+.navbar-header {
+    padding-left: 0;
+}
+
+.navbar .container .navbar-brand {
+    padding-left: 10px;
+    margin-left: 0px;
+}
 
 .top-1 {
     padding-top: 5px;
@@ -11,6 +28,69 @@ li.sortable-placeholder {
 }
 
 .pl_track_duration {
-
     float: right;
 }
+
+.slider .slider-selection {
+    background: #B6B6B6; 
+    z-index: 1;
+}
+
+.slider .slider-handle {
+    background: #9C9C9C;
+/*    width: 15px;*/
+    opacity: 1;
+    z-index: 2;
+}
+
+.slider .slider-loaded {
+    background: #EAEAEA;
+    width: 0%;
+    z-index: 0;
+}
+
+
+.player_nav table td {
+    color: #D0D0D0;
+    padding-left: 10px;
+    padding-right: 20px;
+}
+
+.player_nav .player_btns {
+    min-width: 120px;
+    width: 120px;
+}
+
+.player_nav .player_prog .slider {
+    width: 100%;
+}
+
+.player_nav .player_vol {
+    min-width: 150px;
+    width: 150px;
+}
+
+#track_volume {
+    width: 80px;
+}
+
+
+.btn-circle {
+  width: 32px;
+  height: 32px;
+  text-align: center;
+  padding: 7px 1;
+  font-size: 12px;
+  line-height: 1.428571429;
+  border-radius: 16px;
+}
+
+.btn-circle.btn-xs {
+  width: 25px;
+  height: 25px;
+  padding: 0px 0px;
+  font-size: 12px;
+  line-height: 1.33;
+  border-radius: 16px;
+}
+
