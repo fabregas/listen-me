@@ -31,6 +31,10 @@ li.sortable-placeholder {
     float: right;
 }
 
+.pl_anim {
+    float: right;
+}
+
 .slider .slider-selection {
     background: #B6B6B6; 
     z-index: 1;
@@ -66,8 +70,8 @@ li.sortable-placeholder {
 }
 
 .player_nav .player_vol {
-    min-width: 150px;
-    width: 150px;
+    min-width: 180px;
+    width: 180px;
 }
 
 #track_volume {

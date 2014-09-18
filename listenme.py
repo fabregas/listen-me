@@ -8,6 +8,10 @@ from hashlib import md5
 
 from google.appengine.api import users
 from google.appengine.ext import ndb
+from google.appengine.ext import blobstore
+from google.appengine.api import files
+from google.appengine.ext.webapp import blobstore_handlers
+
 
 import webapp2
 import jinja2
@@ -23,7 +27,7 @@ class Track(ndb.Model):
     title = ndb.StringProperty(indexed=True)
     duration = ndb.IntegerProperty()
     genre = ndb.IntegerProperty(default=-1)
-    url = ndb.StringProperty(indexed=False)
+    blobkey = ndb.BlobKeyProperty(indexed=False)
     index = ndb.IntegerProperty()
 
 class Playlist(ndb.Model):
@@ -88,6 +92,7 @@ class AddPlaylist(webapp2.RequestHandler):
 class AddToPlaylist(webapp2.RequestHandler):
     def post(self):
         error = ''
+        blobkey = None
 
         def a_get(attr):
             val = self.request.get(attr, None)
@@ -105,20 +110,39 @@ class AddToPlaylist(webapp2.RequestHandler):
             url = a_get('url')
             duration = a_get('duration')
 
+            blobkey = self.save_track(url)
+
             key = ndb.Key('Playlist', int(pl_id))
             pl = key.get()
 
             track = Track(aid=int(aid), artist=artist, title=title, \
-                        duration=int(duration), url=url, index=len(pl.tracks)+1)
-
+                        duration=int(duration), blobkey=blobkey, index=len(pl.tracks)+1)
 
             pl.tracks.append(track) 
             pl.put()
         except Exception, err:
             error = str(err)
+            if blobkey:
+                blob = blobstore.BlobInfo.get(blobkey)
+                blob.delete()
 
         self.response.headers['Content-Type'] = 'application/json'
-        self.response.write(json.dumps({'error': error}))
+        self.response.write(json.dumps({'error': error, 'url': '/a/%s'%str(blobkey)}))
+
+    def save_track(self, url):
+        file_name = files.blobstore.create(mime_type='application/octet-stream')
+
+        track_obj = urllib.urlopen(url)
+        with files.open(file_name, 'ab') as f:
+            while True:
+                data = track_obj.read(8192)
+                if not data:
+                    break
+                f.write(data)
+
+        files.finalize(file_name)
+        return files.blobstore.get_blob_key(file_name)
+
 
 class ChangePlaylist(webapp2.RequestHandler):
     def post(self):
@@ -193,6 +217,12 @@ class DelPlaylist(webapp2.RequestHandler):
                 raise Exception('Expected ID attribute!')
 
             key = ndb.Key('Playlist', int(pl_id))
+            pl = key.get()
+            for track in pl.tracks:
+                if track.blobkey:
+                    blob = blobstore.BlobInfo.get(track.blobkey)
+                    if blob:
+                        blob.delete()
             key.delete()
         except Exception, err:
             error = str(err)
@@ -223,6 +253,11 @@ class DelTrack(webapp2.RequestHandler):
                     break
 
             if rm_i is not None:
+                track = pl.tracks[rm_i]
+                if track.blobkey:
+                    blob = blobstore.BlobInfo.get(track.blobkey)
+                    if blob:
+                        blob.delete()
                 del pl.tracks[rm_i]
                 pl.put()
         except Exception, err:
@@ -269,7 +304,10 @@ class GetPlaylistInfo(webapp2.RequestHandler):
             key = ndb.Key('Playlist', int(pl_id))
             pl_obj = key.get()
             descr = pl_obj.description
-            tracks = [tr.to_dict() for tr in pl_obj.tracks]
+
+            tracks = [{'aid': tr.aid, 'artist': tr.artist, 'title': tr.title, \
+                        'duration': tr.duration, 'index': tr.index, 'genre': tr.genre, \
+                        'url': '' if not tr.blobkey else '/a/%s'%str(tr.blobkey)} for tr in pl_obj.tracks]
             tracks.sort(key = lambda i: i['index'])
         except Exception, err:
             error = str(err)
@@ -343,6 +381,13 @@ class SearchAudio(webapp2.RequestHandler):
                                             'tracks': records, 'error':error}))
 
 
+class GetBlob(blobstore_handlers.BlobstoreDownloadHandler):
+    def get(self, resource):
+        resource = str(urllib.unquote(resource))
+        blob_info = blobstore.BlobInfo.get(resource)
+        self.send_blob(blob_info)
+
+
 AUTH_SECRET = ''
 q = Config.query(Config.key == 'vk_auth_secret')
 config_v = q.fetch(1)
@@ -365,5 +410,5 @@ application = webapp2.WSGIApplication([
     ('/add_to_playlist', AddToPlaylist),
     ('/change_playlist', ChangePlaylist),
     ('/del_track', DelTrack),
-    ('/auth', AuthPage)
+    ('/a/([^/]+)?', GetBlob)
 ], debug=True)
